@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/wilmacedo/willchain-go/models"
 )
@@ -9,12 +10,16 @@ import (
 func main() {
 	chain := models.InitBlockchain()
 
-	chain.AddBlock("First block after genesis")
-	chain.AddBlock("Second block after genesis")
-	chain.AddBlock("Third block after genesis")
+	chain.AddBlock("Second")
+	chain.AddBlock("Third")
+	chain.AddBlock("Fourth")
 
 	for _, block := range chain.Blocks {
-		fmt.Printf("Block hash: %x\n", block.Hash)
-		fmt.Printf("Block data: %s\n\n", block.Data)
+		fmt.Printf("Previous hash: %x\n", block.PreviousHash)
+		fmt.Printf("Hash: %x\n", block.Hash)
+		fmt.Printf("Data: %s\n", block.Data)
+
+		pow := models.NewProof(block)
+		fmt.Printf("Is valide: %s\n\n", strconv.FormatBool(pow.Validate()))
 	}
 }

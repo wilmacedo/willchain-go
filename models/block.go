@@ -3,6 +3,8 @@ package models
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/gob"
+	"log"
 )
 
 type Block struct {
@@ -36,4 +38,30 @@ func CreateBlock(data string, previousHash []byte) *Block {
 
 func Genesis() *Block {
 	return CreateBlock("Genesis", []byte{})
+}
+
+func (block *Block) Serialize() []byte {
+	var result bytes.Buffer
+	encoder := gob.NewEncoder(&result)
+
+	err := encoder.Encode(block)
+	Handle(err)
+
+	return result.Bytes()
+}
+
+func Deserialize(data []byte) *Block {
+	var block *Block
+	decoder := gob.NewDecoder(bytes.NewBuffer(data))
+
+	err := decoder.Decode(&block)
+	Handle(err)
+
+	return block
+}
+
+func Handle(err error) {
+	if err != nil {
+		log.Panic(err)
+	}
 }
