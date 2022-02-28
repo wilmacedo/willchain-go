@@ -17,7 +17,7 @@ func (block *Block) CalculateHash() {
 	block.Hash = hash[:]
 }
 
-func AddBlock(data string, previousHash []byte) *Block {
+func CreateBlock(data string, previousHash []byte) *Block {
 	block := &Block{
 		Hash:         []byte{},
 		Data:         []byte(data),
@@ -25,4 +25,8 @@ func AddBlock(data string, previousHash []byte) *Block {
 	}
 	block.CalculateHash()
 	return block
+}
+
+func Genesis() *Block {
+	return CreateBlock("Genesis", []byte{})
 }
