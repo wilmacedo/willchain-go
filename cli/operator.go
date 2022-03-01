@@ -9,7 +9,7 @@ import (
 
 	"github.com/wilmacedo/willchain-go/core"
 	"github.com/wilmacedo/willchain-go/factory"
-	"github.com/wilmacedo/willchain-go/models"
+	"github.com/wilmacedo/willchain-go/wallet"
 )
 
 type CommandLine struct{}
@@ -20,6 +20,8 @@ func (cli *CommandLine) printUsage() {
 	fmt.Println(" createblockchain -address [ADDRESS] - Creates a blockchain in another address")
 	fmt.Println(" printchain - Prints the blocks in the chain")
 	fmt.Println(" send -from [FROM] -to [TO] -amount [AMOUNT] - Send amount from to another account and specificy amount")
+	fmt.Println(" createwallet - Creates a new wallet")
+	fmt.Println(" listaddresses - List the addresses in our wallet file")
 }
 
 func (cli *CommandLine) validateArgs() {
@@ -76,9 +78,32 @@ func (cli *CommandLine) send(from, to string, amount int) {
 	defer chain.Database.Close()
 
 	tx := factory.NewTransaction(from, to, amount, chain)
-	chain.AddBlock([]*models.Transaction{tx})
+	chain.AddBlock([]*factory.Transaction{tx})
 
 	fmt.Println("Success!")
+}
+
+func (cli *CommandLine) createWallet() {
+	wallets, _ := wallet.CreateWallets()
+	address := wallets.AddWallet()
+	wallets.SaveFile()
+
+	fmt.Printf("wallet created: %v\n", address)
+}
+
+func (cli *CommandLine) listAddresses() {
+	wallets := &wallet.Wallets{}
+	err := wallets.LoadFile()
+	if err != nil {
+		fmt.Printf("error on load wallets file: %v", err)
+		return
+	}
+
+	addresses := wallets.GetAllAddresses()
+
+	for _, address := range addresses {
+		fmt.Println(address)
+	}
 }
 
 func (cli *CommandLine) Run() {
@@ -88,6 +113,8 @@ func (cli *CommandLine) Run() {
 	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
+	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
+	listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
 
 	balanceAddress := balanceCmd.String("address", "", "The address to retrieve balance")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to be create")
@@ -110,6 +137,14 @@ func (cli *CommandLine) Run() {
 
 	case "printchain":
 		err := printChainCmd.Parse(os.Args[2:])
+		core.Handle(err)
+
+	case "createwallet":
+		err := createWalletCmd.Parse(os.Args[2:])
+		core.Handle(err)
+
+	case "listaddresses":
+		err := listAddressesCmd.Parse(os.Args[2:])
 		core.Handle(err)
 
 	default:
@@ -136,17 +171,7 @@ func (cli *CommandLine) Run() {
 	}
 
 	if sendCmd.Parsed() {
-		if *sendFrom == "" {
-			sendCmd.Usage()
-			runtime.Goexit()
-		}
-
-		if *sendTo == "" {
-			sendCmd.Usage()
-			runtime.Goexit()
-		}
-
-		if *sendAmount < 0 {
+		if *sendFrom == "" || *sendTo == "" || *sendAmount <= 0 {
 			sendCmd.Usage()
 			runtime.Goexit()
 		}
@@ -156,5 +181,13 @@ func (cli *CommandLine) Run() {
 
 	if printChainCmd.Parsed() {
 		cli.printChain()
+	}
+
+	if createWalletCmd.Parsed() {
+		cli.createWallet()
+	}
+
+	if listAddressesCmd.Parsed() {
+		cli.listAddresses()
 	}
 }
