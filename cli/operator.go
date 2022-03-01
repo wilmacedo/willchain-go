@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/wilmacedo/willchain-go/core"
+	"github.com/wilmacedo/willchain-go/factory"
 	"github.com/wilmacedo/willchain-go/models"
 )
 
@@ -29,7 +30,7 @@ func (cli *CommandLine) validateArgs() {
 }
 
 func (cli *CommandLine) printChain() {
-	chain := models.ContinueBlockchain("")
+	chain := factory.ContinueBlockchain("")
 	defer chain.Database.Close()
 
 	iter := chain.Iterator()
@@ -40,7 +41,7 @@ func (cli *CommandLine) printChain() {
 		fmt.Printf("Previous hash: %x\n", block.PreviousHash)
 		fmt.Printf("Hash: %x\n", block.Hash)
 
-		pow := models.NewProof(block)
+		pow := factory.NewProof(block)
 		fmt.Printf("Is valide: %s\n\n", strconv.FormatBool(pow.Validate()))
 
 		if len(block.PreviousHash) == 0 {
@@ -50,14 +51,14 @@ func (cli *CommandLine) printChain() {
 }
 
 func (cli *CommandLine) createBlockchain(address string) {
-	chain := models.InitBlockchain(address)
+	chain := factory.InitBlockchain(address)
 	defer chain.Database.Close()
 
 	fmt.Println("Finished!")
 }
 
 func (cli *CommandLine) getBalance(address string) {
-	chain := models.ContinueBlockchain(address)
+	chain := factory.ContinueBlockchain(address)
 	defer chain.Database.Close()
 
 	balance := 0
@@ -71,10 +72,10 @@ func (cli *CommandLine) getBalance(address string) {
 }
 
 func (cli *CommandLine) send(from, to string, amount int) {
-	chain := models.ContinueBlockchain(from)
+	chain := factory.ContinueBlockchain(from)
 	defer chain.Database.Close()
 
-	tx := models.NewTransaction(from, to, amount, chain)
+	tx := factory.NewTransaction(from, to, amount, chain)
 	chain.AddBlock([]*models.Transaction{tx})
 
 	fmt.Println("Success!")

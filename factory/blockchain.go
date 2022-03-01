@@ -1,4 +1,4 @@
-package models
+package factory
 
 import (
 	"encoding/hex"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/wilmacedo/willchain-go/core"
+	"github.com/wilmacedo/willchain-go/models"
 	"github.com/wilmacedo/willchain-go/storage"
 )
 
@@ -61,7 +62,7 @@ func InitBlockchain(address string) *Blockchain {
 	return chain
 }
 
-func (chain *Blockchain) AddBlock(transactions []*Transaction) {
+func (chain *Blockchain) AddBlock(transactions []*models.Transaction) {
 	lastHash, err := chain.Database.Get([]byte("lh"), nil)
 	core.Handle(err)
 
@@ -120,8 +121,8 @@ func (iter *Iterator) Next() *Block {
 	return block
 }
 
-func (chain *Blockchain) FindUnspentTransactions(address string) []Transaction {
-	var unspentTxs []Transaction
+func (chain *Blockchain) FindUnspentTransactions(address string) []models.Transaction {
+	var unspentTxs []models.Transaction
 
 	spentTXRes := make(map[string][]int)
 
@@ -167,8 +168,8 @@ func (chain *Blockchain) FindUnspentTransactions(address string) []Transaction {
 	return unspentTxs
 }
 
-func (chain *Blockchain) FindResTX(address string) []TXResult {
-	var resTxs []TXResult
+func (chain *Blockchain) FindResTX(address string) []models.TXResult {
+	var resTxs []models.TXResult
 	unspentTxs := chain.FindUnspentTransactions(address)
 
 	for _, tx := range unspentTxs {

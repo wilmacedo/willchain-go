@@ -1,4 +1,4 @@
-package models
+package factory
 
 import (
 	"bytes"
@@ -6,11 +6,12 @@ import (
 	"encoding/gob"
 
 	"github.com/wilmacedo/willchain-go/core"
+	"github.com/wilmacedo/willchain-go/models"
 )
 
 type Block struct {
 	Hash         []byte
-	Transactions []*Transaction
+	Transactions []*models.Transaction
 	PreviousHash []byte
 	Nonce        int
 }
@@ -28,7 +29,7 @@ func (block *Block) HashTransactions() []byte {
 	return txHash[:]
 }
 
-func CreateBlock(txs []*Transaction, previousHash []byte) *Block {
+func CreateBlock(txs []*models.Transaction, previousHash []byte) *Block {
 	block := &Block{
 		Hash:         []byte{},
 		Transactions: txs,
@@ -44,8 +45,8 @@ func CreateBlock(txs []*Transaction, previousHash []byte) *Block {
 	return block
 }
 
-func Genesis(coinbase *Transaction) *Block {
-	return CreateBlock([]*Transaction{coinbase}, []byte{})
+func Genesis(coinbase *models.Transaction) *Block {
+	return CreateBlock([]*models.Transaction{coinbase}, []byte{})
 }
 
 func (block *Block) Serialize() []byte {
