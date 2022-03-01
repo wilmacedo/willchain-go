@@ -1,25 +1,20 @@
 package main
 
 import (
-	"fmt"
-	"strconv"
+	"os"
 
+	"github.com/wilmacedo/willchain-go/cli"
 	"github.com/wilmacedo/willchain-go/models"
 )
 
 func main() {
+	defer os.Exit(0)
+
 	chain := models.InitBlockchain()
+	defer chain.Database.Close()
 
-	chain.AddBlock("Second")
-	chain.AddBlock("Third")
-	chain.AddBlock("Fourth")
-
-	for _, block := range chain.Blocks {
-		fmt.Printf("Previous hash: %x\n", block.PreviousHash)
-		fmt.Printf("Hash: %x\n", block.Hash)
-		fmt.Printf("Data: %s\n", block.Data)
-
-		pow := models.NewProof(block)
-		fmt.Printf("Is valide: %s\n\n", strconv.FormatBool(pow.Validate()))
+	cli := cli.CommandLine{
+		Blockchain: chain,
 	}
+	cli.Run()
 }
