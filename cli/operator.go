@@ -9,6 +9,7 @@ import (
 
 	"github.com/wilmacedo/willchain-go/core"
 	"github.com/wilmacedo/willchain-go/factory"
+	"github.com/wilmacedo/willchain-go/utils"
 	"github.com/wilmacedo/willchain-go/wallet"
 )
 
@@ -46,6 +47,10 @@ func (cli *CommandLine) printChain() {
 		pow := factory.NewProof(block)
 		fmt.Printf("Is valide: %s\n\n", strconv.FormatBool(pow.Validate()))
 
+		for _, tx := range block.Transactions {
+			fmt.Println(tx)
+		}
+
 		if len(block.PreviousHash) == 0 {
 			break
 		}
@@ -60,11 +65,16 @@ func (cli *CommandLine) createBlockchain(address string) {
 }
 
 func (cli *CommandLine) getBalance(address string) {
+	if !wallet.ValidateAddress(address) {
+		core.Handle(core.ErrInvalidAddress)
+	}
+
 	chain := factory.ContinueBlockchain(address)
 	defer chain.Database.Close()
 
 	balance := 0
-	txs := chain.FindResTX(address)
+
+	txs := chain.FindResTX(utils.DecodeAddress(address))
 
 	for _, tx := range txs {
 		balance += tx.Value
@@ -74,6 +84,14 @@ func (cli *CommandLine) getBalance(address string) {
 }
 
 func (cli *CommandLine) send(from, to string, amount int) {
+	if !wallet.ValidateAddress(from) {
+		core.Handle(core.ErrInvalidAddress)
+	}
+
+	if !wallet.ValidateAddress(to) {
+		core.Handle(core.ErrInvalidAddress)
+	}
+
 	chain := factory.ContinueBlockchain(from)
 	defer chain.Database.Close()
 

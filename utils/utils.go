@@ -1,4 +1,4 @@
-package wallet
+package utils
 
 import (
 	"github.com/mr-tron/base58"
@@ -16,4 +16,11 @@ func Base58Decode(data []byte) []byte {
 	core.Handle(err)
 
 	return decode
+}
+
+func DecodeAddress(address string) []byte {
+	pubKeyHash := Base58Decode([]byte(address))
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+
+	return pubKeyHash
 }

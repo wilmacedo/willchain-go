@@ -2,53 +2,208 @@ package factory
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
+	"math/big"
+	"strings"
 
 	"github.com/wilmacedo/willchain-go/core"
+	"github.com/wilmacedo/willchain-go/utils"
+	"github.com/wilmacedo/willchain-go/wallet"
 )
 
 type Transaction struct {
-	Hash     []byte
+	ID       []byte
 	Requests []TXRequest
 	Results  []TXResult
 }
 
 type TXRequest struct {
-	Hash []byte
-	Out  int
-	Sig  string
+	ID        []byte
+	Out       int
+	Signature []byte
+	PubKey    []byte
 }
 
 type TXResult struct {
-	Value  int
-	PubKey string
+	Value      int
+	PubKeyHash []byte
 }
 
-func (tx *Transaction) CalculateHash() {
-	var encoded bytes.Buffer
+func (tx *Transaction) CalculateHash() []byte {
 	var hash [32]byte
 
-	encode := gob.NewEncoder(&encoded)
-	err := encode.Encode(tx)
-	core.Handle(err)
+	txCopy := *tx
+	txCopy.ID = []byte{}
 
-	hash = sha256.Sum256(encoded.Bytes())
-	tx.Hash = hash[:]
+	hash = sha256.Sum256(txCopy.Serialize())
+
+	return hash[:]
 }
 
 func (tx *Transaction) IsCoinbase() bool {
-	return len(tx.Requests) == 1 && len(tx.Requests[0].Hash) == 0 && tx.Requests[0].Out == -1
+	return len(tx.Requests) == 1 && len(tx.Requests[0].ID) == 0 && tx.Requests[0].Out == -1
 }
 
-func (req *TXRequest) CanUnlock(data string) bool {
-	return req.Sig == data
+func (tx *Transaction) TrimmedCopy() Transaction {
+	var requests []TXRequest
+	var results []TXResult
+
+	for _, req := range tx.Requests {
+		requests = append(requests, TXRequest{
+			ID:        req.ID,
+			Out:       req.Out,
+			Signature: nil,
+			PubKey:    nil,
+		})
+	}
+
+	for _, res := range tx.Results {
+		results = append(results, TXResult{
+			Value:      res.Value,
+			PubKeyHash: nil,
+		})
+	}
+
+	txCopy := Transaction{
+		ID:       tx.ID,
+		Requests: requests,
+		Results:  results,
+	}
+
+	return txCopy
 }
 
-func (res *TXResult) CanBeUnlocked(data string) bool {
-	return res.PubKey == data
+func (tx *Transaction) Sign(privateKey ecdsa.PrivateKey, prevTxs map[string]Transaction) {
+	if tx.IsCoinbase() {
+		return
+	}
+
+	for _, req := range tx.Requests {
+		if prevTxs[hex.EncodeToString(req.ID)].ID == nil {
+			core.Handle(core.ErrNilPreviousTransactions)
+		}
+	}
+
+	txCopy := tx.TrimmedCopy()
+
+	for reqId, req := range txCopy.Requests {
+		prevTx := prevTxs[hex.EncodeToString(req.ID)]
+		txCopy.Requests[reqId].Signature = nil
+		txCopy.Requests[reqId].PubKey = prevTx.Results[req.Out].PubKeyHash
+		txCopy.ID = txCopy.CalculateHash()
+		txCopy.Requests[reqId].PubKey = nil
+
+		r, s, err := ecdsa.Sign(rand.Reader, &privateKey, txCopy.ID)
+		core.Handle(err)
+
+		signature := append(r.Bytes(), s.Bytes()...)
+
+		tx.Requests[reqId].Signature = signature
+	}
+}
+
+func (req *TXRequest) UsesKey(pubKeyHash []byte) bool {
+	lockingHash := wallet.PublicKeyHash(req.PubKey)
+
+	return bytes.Equal(lockingHash, pubKeyHash)
+}
+
+func (res *TXResult) Lock(address []byte) {
+	pubKeyHash := utils.Base58Decode(address)
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-wallet.ChecksumLength]
+
+	res.PubKeyHash = pubKeyHash
+}
+
+func (res *TXResult) IsLockWithKey(pubKeyHash []byte) bool {
+	return bytes.Equal(res.PubKeyHash, pubKeyHash)
+}
+
+func (tx *Transaction) Verify(prevTxs map[string]Transaction) bool {
+	if tx.IsCoinbase() {
+		return true
+	}
+
+	for _, req := range tx.Requests {
+		if prevTxs[hex.EncodeToString(req.ID)].ID == nil {
+			core.Handle(core.ErrNilPreviousTransactions)
+		}
+	}
+
+	txCopy := tx.TrimmedCopy()
+	curve := elliptic.P256()
+
+	for reqId, req := range tx.Requests {
+		prevTx := prevTxs[hex.EncodeToString(req.ID)]
+		txCopy.Requests[reqId].Signature = nil
+		txCopy.Requests[reqId].PubKey = prevTx.Results[req.Out].PubKeyHash
+		txCopy.ID = txCopy.CalculateHash()
+		txCopy.Requests[reqId].PubKey = nil
+
+		r := big.Int{}
+		s := big.Int{}
+		signLen := len(req.Signature)
+
+		r.SetBytes(req.Signature[:(signLen / 2)])
+		s.SetBytes(req.Signature[(signLen / 2):])
+
+		x := big.Int{}
+		y := big.Int{}
+		keyLen := len(req.PubKey)
+
+		x.SetBytes(req.PubKey[:(keyLen / 2)])
+		y.SetBytes(req.PubKey[(keyLen / 2):])
+
+		rawPubKey := ecdsa.PublicKey{
+			Curve: curve,
+			X:     &x,
+			Y:     &y,
+		}
+
+		if !ecdsa.Verify(&rawPubKey, txCopy.ID, &r, &s) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (tx *Transaction) String() string {
+	var lines []string
+
+	lines = append(lines, fmt.Sprintf("	Transaction %x:", tx.ID))
+
+	for i, req := range tx.Requests {
+		lines = append(lines, fmt.Sprintf("		Request %d:", i))
+		lines = append(lines, fmt.Sprintf("			TXID: %x", req.ID))
+		lines = append(lines, fmt.Sprintf("			Out: %d", req.Out))
+		lines = append(lines, fmt.Sprintf("			Signature: %x", req.Signature))
+		lines = append(lines, fmt.Sprintf("			PubKey: %x", req.PubKey))
+	}
+
+	for i, res := range tx.Results {
+		lines = append(lines, fmt.Sprintf("		Result %d:", i))
+		lines = append(lines, fmt.Sprintf("			Value: %d", res.Value))
+		lines = append(lines, fmt.Sprintf("			PubKeyHash: %x", res.PubKeyHash))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (tx *Transaction) Serialize() []byte {
+	var result bytes.Buffer
+	encoder := gob.NewEncoder(&result)
+
+	err := encoder.Encode(tx)
+	core.Handle(err)
+
+	return result.Bytes()
 }
 
 func CoinbaseTX(to, data string) *Transaction {
@@ -57,23 +212,20 @@ func CoinbaseTX(to, data string) *Transaction {
 	}
 
 	txReq := TXRequest{
-		Hash: []byte{},
-		Out:  -1,
-		Sig:  data,
+		ID:        []byte{},
+		Out:       -1,
+		Signature: nil,
+		PubKey:    []byte(data),
 	}
 
-	txResp := TXResult{
-		Value:  100,
-		PubKey: to,
-	}
+	txResp := NewTXResult(100, to)
 
 	tx := &Transaction{
-		Hash:     nil,
+		ID:       nil,
 		Requests: []TXRequest{txReq},
-		Results:  []TXResult{txResp},
+		Results:  []TXResult{*txResp},
 	}
-
-	tx.CalculateHash()
+	tx.ID = tx.CalculateHash()
 
 	return tx
 }
@@ -82,7 +234,13 @@ func NewTransaction(from, to string, amount int, chain *Blockchain) *Transaction
 	var requests []TXRequest
 	var results []TXResult
 
-	acc, validResults := chain.FindSpendableResults(from, amount)
+	wallets, err := wallet.CreateWallets()
+	core.Handle(err)
+
+	w := wallets.GetWallet(from)
+	pubKeyHash := wallet.PublicKeyHash(w.PublicKey)
+
+	acc, validResults := chain.FindSpendableResults(pubKeyHash, amount)
 
 	if acc < amount {
 		core.Handle(core.ErrEnoughFunds)
@@ -94,32 +252,41 @@ func NewTransaction(from, to string, amount int, chain *Blockchain) *Transaction
 
 		for _, rs := range res {
 			request := TXRequest{
-				Hash: txHash,
-				Out:  rs,
-				Sig:  from,
+				ID:        txHash,
+				Out:       rs,
+				Signature: nil,
+				PubKey:    w.PublicKey,
 			}
 			requests = append(requests, request)
 		}
 	}
 
-	results = append(results, TXResult{
-		Value:  amount,
-		PubKey: to,
-	})
+	results = append(results, *NewTXResult(amount, to))
 
 	if acc > amount {
-		results = append(results, TXResult{
-			Value:  acc - amount,
-			PubKey: from,
-		})
+		results = append(results, *NewTXResult(acc-amount, to))
 	}
 
-	tx := &Transaction{
-		Hash:     nil,
+	tx := Transaction{
+		ID:       nil,
 		Requests: requests,
 		Results:  results,
 	}
-	tx.CalculateHash()
+	tx.ID = tx.CalculateHash()
+	chain.SignTransaction(&tx, w.PrivateKey)
+
+	fmt.Print(tx)
+
+	return &tx
+}
+
+func NewTXResult(value int, address string) *TXResult {
+	tx := &TXResult{
+		Value:      value,
+		PubKeyHash: nil,
+	}
+
+	tx.Lock([]byte(address))
 
 	return tx
 }

@@ -1,17 +1,19 @@
 package wallet
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 
 	"github.com/wilmacedo/willchain-go/core"
+	"github.com/wilmacedo/willchain-go/utils"
 	"golang.org/x/crypto/ripemd160"
 )
 
 const (
-	checksumLength = 4
+	ChecksumLength = 4
 	version        = byte(0x00) // hex representation of zero number
 )
 
@@ -27,9 +29,19 @@ func (wallet Wallet) Address() []byte {
 	checksum := Checksum(versionedHash)
 
 	fullHash := append(versionedHash, checksum...)
-	address := Base58Encode(fullHash)
+	address := utils.Base58Encode(fullHash)
 
 	return address
+}
+
+func ValidateAddress(address string) bool {
+	pubKeyHash := utils.Base58Decode([]byte(address))
+	actualChecksum := pubKeyHash[len(pubKeyHash)-ChecksumLength:]
+	version := pubKeyHash[0]
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-ChecksumLength]
+	targetChecksum := Checksum(append([]byte{version}, pubKeyHash...))
+
+	return bytes.Equal(actualChecksum, targetChecksum)
 }
 
 func NewKeyPair() (ecdsa.PrivateKey, []byte) {
@@ -68,5 +80,5 @@ func Checksum(payload []byte) []byte {
 	firstHash := sha256.Sum256(payload)
 	secondHash := sha256.Sum256(firstHash[:])
 
-	return secondHash[:checksumLength]
+	return secondHash[:ChecksumLength]
 }
