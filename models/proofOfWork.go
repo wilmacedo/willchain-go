@@ -10,7 +10,7 @@ import (
 	"math/big"
 )
 
-const Difficulty = 12
+const Difficulty = 18
 
 type ProofOfWork struct {
 	Block  *Block
@@ -31,8 +31,8 @@ func NewProof(block *Block) *ProofOfWork {
 
 func (pow *ProofOfWork) InitData(nonce int) []byte {
 	data := bytes.Join([][]byte{
-		pow.Block.Data,
 		pow.Block.PreviousHash,
+		pow.Block.HashTransactions(),
 		ToHex(int64(nonce)),
 		ToHex(int64(Difficulty)),
 	}, []byte{})

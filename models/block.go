@@ -4,26 +4,34 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
-	"log"
+
+	"github.com/wilmacedo/willchain-go/core"
 )
 
 type Block struct {
 	Hash         []byte
-	Data         []byte
+	Transactions []*Transaction
 	PreviousHash []byte
 	Nonce        int
 }
 
-func (block *Block) CalculateHash() {
-	data := bytes.Join([][]byte{block.Data, block.PreviousHash}, []byte{})
-	hash := sha256.Sum256(data)
-	block.Hash = hash[:]
+func (block *Block) HashTransactions() []byte {
+	var txHashes [][]byte
+	var txHash [32]byte
+
+	for _, tx := range block.Transactions {
+		txHashes = append(txHashes, tx.Hash)
+	}
+
+	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
+
+	return txHash[:]
 }
 
-func CreateBlock(data string, previousHash []byte) *Block {
+func CreateBlock(txs []*Transaction, previousHash []byte) *Block {
 	block := &Block{
 		Hash:         []byte{},
-		Data:         []byte(data),
+		Transactions: txs,
 		PreviousHash: previousHash,
 		Nonce:        0,
 	}
@@ -36,8 +44,8 @@ func CreateBlock(data string, previousHash []byte) *Block {
 	return block
 }
 
-func Genesis() *Block {
-	return CreateBlock("Genesis", []byte{})
+func Genesis(coinbase *Transaction) *Block {
+	return CreateBlock([]*Transaction{coinbase}, []byte{})
 }
 
 func (block *Block) Serialize() []byte {
@@ -45,7 +53,7 @@ func (block *Block) Serialize() []byte {
 	encoder := gob.NewEncoder(&result)
 
 	err := encoder.Encode(block)
-	Handle(err)
+	core.Handle(err)
 
 	return result.Bytes()
 }
@@ -55,13 +63,7 @@ func Deserialize(data []byte) *Block {
 	decoder := gob.NewDecoder(bytes.NewBuffer(data))
 
 	err := decoder.Decode(&block)
-	Handle(err)
+	core.Handle(err)
 
 	return block
-}
-
-func Handle(err error) {
-	if err != nil {
-		log.Panic(err)
-	}
 }
