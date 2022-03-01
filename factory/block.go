@@ -2,10 +2,10 @@ package factory
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/gob"
 
 	"github.com/wilmacedo/willchain-go/core"
+	"github.com/wilmacedo/willchain-go/factory/merkle"
 )
 
 type Block struct {
@@ -17,15 +17,14 @@ type Block struct {
 
 func (block *Block) HashTransactions() []byte {
 	var txHashes [][]byte
-	var txHash [32]byte
 
 	for _, tx := range block.Transactions {
-		txHashes = append(txHashes, tx.ID)
+		txHashes = append(txHashes, tx.Serialize())
 	}
 
-	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
+	tree := merkle.NewMerkleTree(txHashes)
 
-	return txHash[:]
+	return tree.RootNode.Data
 }
 
 func CreateBlock(txs []*Transaction, previousHash []byte) *Block {

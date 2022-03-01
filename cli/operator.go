@@ -96,7 +96,8 @@ func (cli *CommandLine) send(from, to string, amount int) {
 	defer chain.Database.Close()
 
 	tx := factory.NewTransaction(from, to, amount, chain)
-	chain.AddBlock([]*factory.Transaction{tx})
+	cbTx := factory.CoinbaseTX(from, "")
+	chain.AddBlock([]*factory.Transaction{cbTx, tx})
 
 	fmt.Println("Success!")
 }

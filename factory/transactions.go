@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/wilmacedo/willchain-go/core"
+	wData "github.com/wilmacedo/willchain-go/data"
 	"github.com/wilmacedo/willchain-go/utils"
 	"github.com/wilmacedo/willchain-go/wallet"
 )
@@ -33,6 +34,10 @@ type TXRequest struct {
 type TXResult struct {
 	Value      int
 	PubKeyHash []byte
+}
+
+type TXResults struct {
+	Results []TXResults
 }
 
 func (tx *Transaction) CalculateHash() []byte {
@@ -190,7 +195,7 @@ func (tx *Transaction) String() string {
 	for i, res := range tx.Results {
 		lines = append(lines, fmt.Sprintf("		Result %d:", i))
 		lines = append(lines, fmt.Sprintf("			Value: %d", res.Value))
-		lines = append(lines, fmt.Sprintf("			PubKeyHash: %x", res.PubKeyHash))
+		lines = append(lines, fmt.Sprintf("			Script: %x", res.PubKeyHash))
 	}
 
 	return strings.Join(lines, "\n")
@@ -206,9 +211,33 @@ func (tx *Transaction) Serialize() []byte {
 	return result.Bytes()
 }
 
+func (ress TXResults) Serialize() []byte {
+	var buffer bytes.Buffer
+
+	encode := gob.NewEncoder(&buffer)
+	err := encode.Encode(ress)
+	core.Handle(err)
+
+	return buffer.Bytes()
+}
+
+func DeserializeResults(data []byte) TXResults {
+	var results TXResults
+	decoder := gob.NewDecoder(bytes.NewBuffer(data))
+
+	err := decoder.Decode(&results)
+	core.Handle(err)
+
+	return results
+}
+
 func CoinbaseTX(to, data string) *Transaction {
 	if data == "" {
-		data = fmt.Sprintf("Coins to %s", to)
+		randData := make([]byte, 24)
+		_, err := rand.Read(randData)
+		core.Handle(err)
+
+		data = fmt.Sprintf("%x", randData)
 	}
 
 	txReq := TXRequest{
@@ -218,7 +247,7 @@ func CoinbaseTX(to, data string) *Transaction {
 		PubKey:    []byte(data),
 	}
 
-	txResp := NewTXResult(100, to)
+	txResp := NewTXResult(wData.INITIAL_GENESIS_REWARD, to)
 
 	tx := &Transaction{
 		ID:       nil,
@@ -274,8 +303,6 @@ func NewTransaction(from, to string, amount int, chain *Blockchain) *Transaction
 	}
 	tx.ID = tx.CalculateHash()
 	chain.SignTransaction(&tx, w.PrivateKey)
-
-	fmt.Print(tx)
 
 	return &tx
 }
